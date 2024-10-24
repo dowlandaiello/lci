@@ -1,0 +1,2 @@
+# wasm-playground
+Fun!
