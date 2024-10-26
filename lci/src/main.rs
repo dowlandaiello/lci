@@ -3,6 +3,9 @@ use std::{
     io::{self, Write},
 };
 
+const WELLFORMED_PARENTHESIZED_TERM: [Token; 3] =
+    [Token::LeftParen, Token::Id('*'), Token::RightParen];
+
 const WELLFORMED_ABSTRACTION_HEADER: [Token; 4] =
     [Token::LeftParen, Token::Lambda, Token::Id('*'), Token::Dot];
 
@@ -127,6 +130,33 @@ impl TryFrom<&TokenStream> for Expr {
                 }
             }
 
+            // Parenthesized term
+            if term.len() == 3 {
+                if let Some((unexpected_token, _)) = term
+                    .iter()
+                    .take(WELLFORMED_PARENTHESIZED_TERM.len())
+                    .zip(WELLFORMED_PARENTHESIZED_TERM.iter())
+                    .filter(|(a, b)| !a.content.is_like(b))
+                    .next()
+                {
+                    return Err(unexpected_token.as_err_unrecognized_token());
+                }
+
+                let parenthesized_term = &term[1];
+
+                match parenthesized_term {
+                    Span {
+                        pos: _,
+                        content: Token::Id(c),
+                    } => {
+                        return Ok(Expr::Id(*c));
+                    }
+                    unexpected_tok => {
+                        return Err(unexpected_tok.as_err_unrecognized_token());
+                    }
+                }
+            }
+
             // Lambda abstraction must begin with (\x. and end with a )
             if term[term.len() - 1].content != Token::RightParen {
                 return Err(term[term.len() - 1].as_err_unrecognized_token());
@@ -169,7 +199,7 @@ impl TryFrom<&TokenStream> for Expr {
                 rhs: Box::new(argument),
             };
 
-            if applicands.len() == 1 {
+            if applicands.len() == 0 {
                 return Ok(curr);
             }
 
@@ -442,7 +472,73 @@ mod test {
     }
 
     #[test]
-    fn test_parse() {
+    fn test_curried_free_term_and_application() {
+        assert_eq!(
+            pop_paren_expr(lex("(\\a.a)a").unwrap().as_slice()).unwrap(),
+            (
+                vec![
+                    Span {
+                        pos: 0,
+                        content: Token::LeftParen,
+                    },
+                    Span {
+                        pos: 1,
+                        content: Token::Lambda,
+                    },
+                    Span {
+                        pos: 2,
+                        content: Token::Id('a'),
+                    },
+                    Span {
+                        pos: 3,
+                        content: Token::Dot,
+                    },
+                    Span {
+                        pos: 4,
+                        content: Token::Id('a')
+                    },
+                    Span {
+                        pos: 5,
+                        content: Token::RightParen,
+                    }
+                ],
+                vec![Span {
+                    pos: 6,
+                    content: Token::Id('a')
+                }],
+            )
+        );
+    }
+
+    #[test]
+    fn test_parse_free_term() {
+        assert_eq!(
+            <&TokenStream as TryInto<Expr>>::try_into(lex("a").unwrap().as_slice()).unwrap(),
+            Expr::Id('a')
+        );
+    }
+
+    #[test]
+    fn test_parse_parenthesized_term() {
+        assert_eq!(
+            <&TokenStream as TryInto<Expr>>::try_into(lex("(a)").unwrap().as_slice()).unwrap(),
+            Expr::Id('a')
+        );
+    }
+
+    #[test]
+    fn test_parse_parenthesized_applications() {
+        assert_eq!(
+            <&TokenStream as TryInto<Expr>>::try_into(lex("(a)(a)").unwrap().as_slice()).unwrap(),
+            Expr::Application {
+                lhs: Box::new(Expr::Id('a')),
+                rhs: Box::new(Expr::Id('a'))
+            },
+        );
+    }
+
+    #[test]
+    fn test_parse_complex_expression() {
         assert_eq!(
             <&TokenStream as TryInto<Expr>>::try_into(lex("(\\a.a)(a)").unwrap().as_slice())
                 .unwrap(),
@@ -451,8 +547,22 @@ mod test {
                     bind_id: 'a',
                     body: Box::new(Expr::Id('a'))
                 }),
-                rhs: Box::new(Expr::Id('a')),
-            }
+                rhs: Box::new(Expr::Id('a'))
+            },
+        );
+        assert_eq!(
+            <&TokenStream as TryInto<Expr>>::try_into(lex("(\\a.a)(a)(a)").unwrap().as_slice())
+                .unwrap(),
+            Expr::Application {
+                lhs: Box::new(Expr::Abstraction {
+                    bind_id: 'a',
+                    body: Box::new(Expr::Id('a'))
+                }),
+                rhs: Box::new(Expr::Application {
+                    lhs: Box::new(Expr::Id('a')),
+                    rhs: Box::new(Expr::Id('a'))
+                })
+            },
         );
     }
 }
