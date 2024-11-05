@@ -64,6 +64,18 @@ pub enum Expr {
 }
 
 impl Expr {
+    fn insert_cdr(self, e: Expr) -> Self {
+        match self {
+            se @ Self::Abstraction { .. } | se @ Self::Id(_) => Self::Application {
+                lhs: Box::new(se),
+                rhs: Box::new(e),
+            },
+            Self::Application { lhs, rhs } => Self::Application {
+                lhs,
+                rhs: Box::new(rhs.insert_cdr(e)),
+            },
+        }
+    }
     /// Renames all free variables in this scope to the specified value
     pub fn rename_free(&self, from: char, to: char) -> Self {
         match self {
@@ -315,10 +327,7 @@ impl TryFrom<&TokenStream> for Expr {
         let init = <&TokenStream as TryInto<Expr>>::try_into(applicands.remove(0).as_slice())?;
 
         applicands.into_iter().try_fold(init, |expr, arg| {
-            Ok(Expr::Application {
-                lhs: Box::new(expr),
-                rhs: Box::new(<&TokenStream as TryInto<Expr>>::try_into(arg.as_slice())?),
-            })
+            Ok(expr.insert_cdr(<&TokenStream as TryInto<Expr>>::try_into(arg.as_slice())?))
         })
     }
 }
@@ -513,6 +522,85 @@ mod test {
     }
 
     #[test]
+    fn test_pop_paren_expr_easy() {
+        let tokens = lex("(\\a.(\\b.a))(a)(b)").unwrap();
+
+        assert_eq!(
+            tokens,
+            vec![
+                Span {
+                    pos: 0,
+                    content: Token::LeftParen
+                },
+                Span {
+                    pos: 1,
+                    content: Token::Lambda
+                },
+                Span {
+                    pos: 2,
+                    content: Token::Id('a')
+                },
+                Span {
+                    pos: 3,
+                    content: Token::Dot
+                },
+                Span {
+                    pos: 4,
+                    content: Token::LeftParen
+                },
+                Span {
+                    pos: 5,
+                    content: Token::Lambda
+                },
+                Span {
+                    pos: 6,
+                    content: Token::Id('b')
+                },
+                Span {
+                    pos: 7,
+                    content: Token::Dot
+                },
+                Span {
+                    pos: 8,
+                    content: Token::Id('a')
+                },
+                Span {
+                    pos: 9,
+                    content: Token::RightParen
+                },
+                Span {
+                    pos: 10,
+                    content: Token::RightParen
+                },
+                Span {
+                    pos: 11,
+                    content: Token::LeftParen
+                },
+                Span {
+                    pos: 12,
+                    content: Token::Id('a')
+                },
+                Span {
+                    pos: 13,
+                    content: Token::RightParen
+                },
+                Span {
+                    pos: 14,
+                    content: Token::LeftParen
+                },
+                Span {
+                    pos: 15,
+                    content: Token::Id('b')
+                },
+                Span {
+                    pos: 16,
+                    content: Token::RightParen
+                }
+            ]
+        );
+    }
+
+    #[test]
     fn test_to_curried() {
         for i in 0..1_000 {
             let s = "()".repeat(i);
@@ -538,6 +626,13 @@ mod test {
                 );
             }
         }
+    }
+
+    #[test]
+    fn test_to_curried_easy() {
+        let s = to_curried(lex("(\\a.(\\b.a))(a)(b)").unwrap().as_slice()).unwrap();
+
+        assert_eq!(s.len(), 3);
     }
 
     #[test]
