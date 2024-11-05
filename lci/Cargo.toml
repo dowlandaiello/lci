@@ -2,3 +2,7 @@
 name = "lci"
 version = "0.1.0"
 edition = "2021"
+
+[lib]
+name = "lclib"
+path = "src/lib.rs"

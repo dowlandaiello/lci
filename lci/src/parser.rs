@@ -1,6 +1,5 @@
+use super::{incr_identifier, STARTING_VARIABLE_ID};
 use std::{char, collections::BTreeSet, error::Error as StdError, fmt};
-
-const STARTING_ID: char = '`';
 
 const WELLFORMED_PARENTHESIZED_TERM: [Token; 3] =
     [Token::LeftParen, Token::Id('*'), Token::RightParen];
@@ -65,18 +64,13 @@ pub enum Expr {
 
 impl Expr {
     fn insert_cdr(self, e: Expr) -> Self {
-        match self {
-            se @ Self::Abstraction { .. } | se @ Self::Id(_) => Self::Application {
-                lhs: Box::new(se),
-                rhs: Box::new(e),
-            },
-            Self::Application { lhs, rhs } => Self::Application {
-                lhs,
-                rhs: Box::new(rhs.insert_cdr(e)),
-            },
+        Self::Application {
+            lhs: Box::new(self),
+            rhs: Box::new(e),
         }
     }
-    /// Renames all free variables in this scope to the specified value
+
+    /* Renames all free variables in this scope to the specified value
     pub fn rename_free(&self, from: char, to: char) -> Self {
         match self {
             expr @ Self::Id(c) => {
@@ -104,7 +98,7 @@ impl Expr {
                 }
             }
         }
-    }
+    }*/
 
     /// Replaces all free variables in this scope with the specified value
     pub fn replace_free(&self, mut used_identifiers: BTreeSet<char>, from: char, to: Expr) -> Self {
@@ -127,10 +121,12 @@ impl Expr {
                 // Must do alpha renaming, because the free variables are shadowed
                 // they belong to this new inner scope
                 if used_identifiers.contains(&bind_id) {
-                    let new_bind_id = char::from_u32(
-                        used_identifiers.last().map(|c| *c).unwrap_or(STARTING_ID) as u32 + 1,
-                    )
-                    .unwrap_or(STARTING_ID);
+                    let new_bind_id = incr_identifier(
+                        used_identifiers
+                            .last()
+                            .map(|c| *c)
+                            .unwrap_or(STARTING_VARIABLE_ID),
+                    );
 
                     body = Box::new(body.clone().replace_free(
                         used_identifiers.clone(),

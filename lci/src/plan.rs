@@ -46,7 +46,6 @@ pub enum Plan {
     Irreducible(IrreducibleExpr),
     Substitution {
         step: Box<Plan>,
-        binding: char,
         argument: Box<Plan>,
     },
 }
@@ -70,11 +69,7 @@ impl From<Plan> for Expr {
                 lhs: Box::new(Expr::Id(lhs)),
                 rhs: Box::new(<Plan as Into<Expr>>::into(*rhs.clone())),
             },
-            Plan::Substitution {
-                step,
-                binding: bind_id,
-                argument,
-            } => Self::Application {
+            Plan::Substitution { step, argument } => Self::Application {
                 lhs: Box::new(Self::Abstraction {
                     bind_id,
                     body: Box::new(<Plan as Into<Self>>::into(*step.clone())),
@@ -99,16 +94,18 @@ impl Strategy for NaivePlanner {
                 body: Box::new(Self::translate(*b.clone())),
             })),
             Expr::Application { lhs, rhs } => match *lhs.clone() {
-                Expr::Abstraction { bind_id, body } => Plan::Substitution {
+                Expr::Abstraction { body, bind_id: _ } => Plan::Substitution {
                     step: Box::new(Self::translate(*body.clone())),
-                    binding: bind_id,
                     argument: Box::new(Self::translate(*rhs.clone())),
                 },
                 Expr::Id(c) => Plan::Irreducible(IrreducibleExpr::Application {
                     lhs: c,
                     rhs: Box::new(Self::translate(*rhs.clone())),
                 }),
-                e @ Expr::Application { .. } => Self::translate(e),
+                Expr::Application { .. } => Plan::Substitution {
+                    step: Box::new(Self::translate(*lhs.clone())),
+                    argument: Box::new(Self::translate(*rhs.clone())),
+                },
             },
         }
     }

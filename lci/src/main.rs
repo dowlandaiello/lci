@@ -1,11 +1,9 @@
-use parser::Expr;
-use plan::{NaivePlanner, Plan, Strategy};
-use reducer::{NaiveReducer, Reducer};
+use lclib::{
+    parser::Expr,
+    plan::{NaivePlanner, Plan, Strategy},
+    reducer::{NaiveReducer, Reducer},
+};
 use std::io::{self, Write};
-
-mod parser;
-mod plan;
-mod reducer;
 
 macro_rules! read_eof {
     ($in:ident, $out:ident, $prompt:expr, $t:ty) => {{
@@ -41,7 +39,9 @@ fn main() {
             .try_into()
             .expect("failed to construct AST");
 
-        let mut plan: Plan = NaivePlanner::translate(expr);
+        let mut plan: Plan = NaivePlanner::translate(expr.clone());
+
+        println!("{:?} {:?}", expr, plan);
 
         loop {
             let input_buff =
