@@ -1,6 +1,4 @@
-pub mod error;
 pub mod parser;
-pub mod plan;
 pub mod reducer;
 
 pub const STARTING_VARIABLE_ID: char = '`';

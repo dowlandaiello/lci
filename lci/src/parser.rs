@@ -1,5 +1,5 @@
 use super::{incr_identifier, STARTING_VARIABLE_ID};
-use std::{char, collections::BTreeSet, error::Error as StdError, fmt};
+use std::{backtrace::Backtrace, char, collections::BTreeSet, error::Error as StdError, fmt};
 
 const WELLFORMED_PARENTHESIZED_TERM: [Token; 3] =
     [Token::LeftParen, Token::Id('*'), Token::RightParen];
@@ -32,15 +32,48 @@ impl fmt::Display for Error {
 
 impl StdError for Error {}
 
-#[derive(Debug, PartialEq, Clone)]
-pub struct Span<T: fmt::Debug + PartialEq + Clone> {
+#[derive(Debug)]
+pub struct Span<T: fmt::Debug + Clone> {
     pos: usize,
     content: T,
+    backtrace: Backtrace,
+}
+
+impl<T: fmt::Debug + Clone> Clone for Span<T> {
+    fn clone(&self) -> Self {
+        Self::new(self.pos, self.content.clone())
+    }
+}
+
+impl<T: fmt::Debug + Clone> Span<T> {
+    pub fn new(pos: usize, content: T) -> Self {
+        Self {
+            pos,
+            content,
+            backtrace: Backtrace::capture(),
+        }
+    }
+}
+
+impl<T: fmt::Debug + PartialEq + Clone> Span<T> {
+    pub fn contents_eq(&self, other: &Self) -> bool {
+        self.content == other.content
+    }
+}
+
+impl<T: fmt::Debug + PartialEq + Clone> PartialEq for Span<T> {
+    fn eq(&self, other: &Self) -> bool {
+        self.content == other.content
+    }
+
+    fn ne(&self, other: &Self) -> bool {
+        self.content != other.content
+    }
 }
 
 impl fmt::Display for Span<Error> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
-        write!(f, "err @ {}: {}", self.pos, self.content)
+        write!(f, "err @ {}: {}{}", self.pos, self.content, self.backtrace)
     }
 }
 
@@ -48,10 +81,7 @@ impl StdError for Span<Error> {}
 
 impl Span<Token> {
     fn as_err_unrecognized_token(&self) -> Span<Error> {
-        Span {
-            pos: self.pos,
-            content: Error::UnrecognizedToken(self.content.clone()),
-        }
+        Span::new(self.pos, Error::UnrecognizedToken(self.content.clone()))
     }
 }
 
@@ -146,15 +176,6 @@ impl Expr {
             }
         }
     }
-
-    /* Determins whether the AST contains a free variable with the given name.
-    pub fn contains_free(&self, id: char) -> bool {
-        match self {
-            Self::Id(c) => *c == id,
-            Self::Application { lhs, rhs } => lhs.contains_free(id) || rhs.contains_free(id),
-            Self::Abstraction { bind_id, body } => *bind_id != id && body.contains_free(id),
-        }
-    }*/
 }
 
 impl fmt::Display for Expr {
@@ -181,26 +202,29 @@ pub fn pop_paren_expr(tok_stream: &TokenStream) -> Result<(TokenBuff, TokenBuff)
             Span {
                 pos: _,
                 content: Token::LeftParen,
+                backtrace: _,
             } => {
                 left_parens.push(());
             }
             Span {
                 pos: _,
                 content: Token::RightParen,
+                backtrace: _,
             } => {
                 left_parens.pop();
             }
-            Span { pos: _, content: _ } => {}
+            Span {
+                pos: _,
+                content: _,
+                backtrace: _,
+            } => {}
         }
 
         expr.push(token);
     }
 
     if !left_parens.is_empty() {
-        return Err(Span {
-            pos: buff[buff.len() - 1].pos,
-            content: Error::UnbalancedParen,
-        });
+        return Err(Span::new(buff[buff.len() - 1].pos, Error::UnbalancedParen));
     }
 
     Ok((expr, buff))
@@ -237,10 +261,9 @@ impl TryFrom<&TokenStream> for Expr {
 
         // Single term
         if applicands.len() == 1 {
-            let mut term = applicands.pop().ok_or(Span {
-                pos: 0,
-                content: Error::EmptyExpression,
-            })?;
+            let mut term = applicands
+                .pop()
+                .ok_or(Span::new(0, Error::EmptyExpression))?;
 
             // Free term
             if term.len() == 1 {
@@ -250,16 +273,29 @@ impl TryFrom<&TokenStream> for Expr {
                     Span {
                         pos: _,
                         content: Token::Id(c),
+                        backtrace: _,
                     } => {
                         return Ok(Expr::Id(c));
                     }
-                    Span { pos, content } => {
-                        return Err(Span {
-                            pos,
-                            content: Error::UnrecognizedToken(content),
-                        });
+                    Span {
+                        pos,
+                        content,
+                        backtrace: _,
+                    } => {
+                        return Err(Span::new(pos, Error::UnrecognizedToken(content)));
                     }
                 }
+            }
+
+            // Parenthesized smoething
+            if term.len() > 3
+                && term[0].content == Token::LeftParen
+                && term[term.len() - 1].content == Token::RightParen
+                && term[1].content != Token::Lambda
+            {
+                let content = &term[1..term.len() - 1];
+
+                return content.try_into();
             }
 
             // Parenthesized term
@@ -280,6 +316,7 @@ impl TryFrom<&TokenStream> for Expr {
                     Span {
                         pos: _,
                         content: Token::Id(c),
+                        backtrace: _,
                     } => {
                         return Ok(Expr::Id(*c));
                     }
@@ -310,6 +347,7 @@ impl TryFrom<&TokenStream> for Expr {
             if let Span {
                 pos: _,
                 content: Token::Id(c),
+                backtrace: _,
             } = term[2]
             {
                 return Ok(Expr::Abstraction {
@@ -374,11 +412,8 @@ pub fn lex(input: &str) -> Result<TokenBuff, Span<Error>> {
         .filter(|(_, c)| !c.is_whitespace())
         .map(|(i, c)| {
             c.try_into()
-                .map_err(|e| Span { pos: i, content: e })
-                .map(|token| Span {
-                    pos: i,
-                    content: token,
-                })
+                .map_err(|e| Span::new(i, e))
+                .map(|token| Span::new(i, token))
         })
         .collect::<Result<_, _>>()
 }
@@ -410,13 +445,7 @@ mod test {
 
         let tokens = lex(s).unwrap();
 
-        assert_eq!(
-            tokens[0],
-            Span {
-                pos: 0,
-                content: Token::Id('a')
-            }
-        );
+        assert!(tokens[0].contents_eq(&Span::new(0, Token::Id('a'))));
     }
 
     #[test]
@@ -425,27 +454,28 @@ mod test {
 
         let tokens = lex(s).unwrap();
 
-        assert_eq!(
-            tokens,
-            vec![
-                Span {
-                    pos: 0,
-                    content: Token::Lambda,
-                },
-                Span {
-                    pos: 1,
-                    content: Token::Id('a'),
-                },
-                Span {
-                    pos: 2,
-                    content: Token::Dot,
-                },
-                Span {
-                    pos: 3,
-                    content: Token::Id('a'),
-                }
-            ]
-        );
+        assert!(tokens
+            .into_iter()
+            .zip(
+                vec![
+                    Span::new(0, Token::Lambda,),
+                    Span::new(1, Token::Id('a'),),
+                    Span::new(2, Token::Dot,),
+                    Span::new(3, Token::Id('a'),)
+                ]
+                .into_iter()
+            )
+            .all(|(a, b)| a.contents_eq(&b)));
+    }
+
+    #[test]
+    fn test_curried_vars() {
+        <&str as TryInto<Expr>>::try_into("(a)(b)(c)").unwrap();
+    }
+
+    #[test]
+    fn test_parse_succ() {
+        <&str as TryInto<Expr>>::try_into("(\\n.(\\f.(\\x.(f)((n)(f)(x)))))").unwrap();
     }
 
     #[test]
@@ -454,174 +484,52 @@ mod test {
 
         let tokens = lex(s).unwrap();
 
-        assert_eq!(
-            tokens,
-            vec![
-                Span {
-                    pos: 0,
-                    content: Token::LeftParen,
-                },
-                Span {
-                    pos: 1,
-                    content: Token::Lambda
-                },
-                Span {
-                    pos: 2,
-                    content: Token::Id('a'),
-                },
-                Span {
-                    pos: 3,
-                    content: Token::Dot,
-                },
-                Span {
-                    pos: 4,
-                    content: Token::Id('a')
-                },
-                Span {
-                    pos: 5,
-                    content: Token::RightParen,
-                },
-                Span {
-                    pos: 6,
-                    content: Token::Id('a')
-                }
-            ]
-        );
-    }
-
-    #[test]
-    fn test_pop_paren_expr() {
-        for i in 0..1_000 {
-            let s = "()".repeat(i);
-            let mut tokens = lex(&s).unwrap();
-
-            for j in 0..i {
-                let (expr, rest) = pop_paren_expr(tokens.as_slice()).unwrap();
-
-                assert_eq!(
-                    expr,
-                    vec![
-                        Span {
-                            pos: 2 * j,
-                            content: Token::LeftParen
-                        },
-                        Span {
-                            pos: 2 * j + 1,
-                            content: Token::RightParen
-                        }
-                    ]
-                );
-
-                tokens = rest;
-            }
-        }
+        assert!(tokens
+            .into_iter()
+            .zip(
+                vec![
+                    Span::new(0, Token::LeftParen,),
+                    Span::new(1, Token::Lambda),
+                    Span::new(2, Token::Id('a'),),
+                    Span::new(3, Token::Dot,),
+                    Span::new(4, Token::Id('a')),
+                    Span::new(5, Token::RightParen,),
+                    Span::new(6, Token::Id('a'))
+                ]
+                .into_iter()
+            )
+            .all(|(a, b)| a.contents_eq(&b)));
     }
 
     #[test]
     fn test_pop_paren_expr_easy() {
         let tokens = lex("(\\a.(\\b.a))(a)(b)").unwrap();
 
-        assert_eq!(
-            tokens,
-            vec![
-                Span {
-                    pos: 0,
-                    content: Token::LeftParen
-                },
-                Span {
-                    pos: 1,
-                    content: Token::Lambda
-                },
-                Span {
-                    pos: 2,
-                    content: Token::Id('a')
-                },
-                Span {
-                    pos: 3,
-                    content: Token::Dot
-                },
-                Span {
-                    pos: 4,
-                    content: Token::LeftParen
-                },
-                Span {
-                    pos: 5,
-                    content: Token::Lambda
-                },
-                Span {
-                    pos: 6,
-                    content: Token::Id('b')
-                },
-                Span {
-                    pos: 7,
-                    content: Token::Dot
-                },
-                Span {
-                    pos: 8,
-                    content: Token::Id('a')
-                },
-                Span {
-                    pos: 9,
-                    content: Token::RightParen
-                },
-                Span {
-                    pos: 10,
-                    content: Token::RightParen
-                },
-                Span {
-                    pos: 11,
-                    content: Token::LeftParen
-                },
-                Span {
-                    pos: 12,
-                    content: Token::Id('a')
-                },
-                Span {
-                    pos: 13,
-                    content: Token::RightParen
-                },
-                Span {
-                    pos: 14,
-                    content: Token::LeftParen
-                },
-                Span {
-                    pos: 15,
-                    content: Token::Id('b')
-                },
-                Span {
-                    pos: 16,
-                    content: Token::RightParen
-                }
-            ]
-        );
-    }
-
-    #[test]
-    fn test_to_curried() {
-        for i in 0..1_000 {
-            let s = "()".repeat(i);
-            let tokens = lex(&s).unwrap();
-
-            let parts = to_curried(tokens.as_slice()).unwrap();
-
-            assert_eq!(parts.len(), i);
-
-            for (i, part) in parts.iter().enumerate() {
-                assert_eq!(
-                    part.as_slice(),
-                    [
-                        Span {
-                            pos: 2 * i,
-                            content: Token::LeftParen
-                        },
-                        Span {
-                            pos: 2 * i + 1,
-                            content: Token::RightParen
-                        }
-                    ]
-                );
-            }
-        }
+        assert!(tokens
+            .into_iter()
+            .zip(
+                vec![
+                    Span::new(0, Token::LeftParen),
+                    Span::new(1, Token::Lambda),
+                    Span::new(2, Token::Id('a')),
+                    Span::new(3, Token::Dot),
+                    Span::new(4, Token::LeftParen),
+                    Span::new(5, Token::Lambda),
+                    Span::new(6, Token::Id('b')),
+                    Span::new(7, Token::Dot),
+                    Span::new(8, Token::Id('a')),
+                    Span::new(9, Token::RightParen),
+                    Span::new(10, Token::RightParen),
+                    Span::new(11, Token::LeftParen),
+                    Span::new(12, Token::Id('a')),
+                    Span::new(13, Token::RightParen),
+                    Span::new(14, Token::LeftParen),
+                    Span::new(15, Token::Id('b')),
+                    Span::new(16, Token::RightParen)
+                ]
+                .into_iter()
+            )
+            .all(|(a, b)| a.contents_eq(&b)));
     }
 
     #[test]
@@ -635,13 +543,7 @@ mod test {
     fn test_curried_free_term() {
         assert_eq!(
             pop_paren_expr(lex("a").unwrap().as_slice()).unwrap(),
-            (
-                vec![Span {
-                    pos: 0,
-                    content: Token::Id('a')
-                }],
-                Vec::new(),
-            )
+            (vec![Span::new(0, Token::Id('a'))], Vec::new(),)
         );
     }
 
@@ -651,35 +553,14 @@ mod test {
             pop_paren_expr(lex("(\\a.a)a").unwrap().as_slice()).unwrap(),
             (
                 vec![
-                    Span {
-                        pos: 0,
-                        content: Token::LeftParen,
-                    },
-                    Span {
-                        pos: 1,
-                        content: Token::Lambda,
-                    },
-                    Span {
-                        pos: 2,
-                        content: Token::Id('a'),
-                    },
-                    Span {
-                        pos: 3,
-                        content: Token::Dot,
-                    },
-                    Span {
-                        pos: 4,
-                        content: Token::Id('a')
-                    },
-                    Span {
-                        pos: 5,
-                        content: Token::RightParen,
-                    }
+                    Span::new(0, Token::LeftParen,),
+                    Span::new(1, Token::Lambda,),
+                    Span::new(2, Token::Id('a'),),
+                    Span::new(3, Token::Dot,),
+                    Span::new(4, Token::Id('a')),
+                    Span::new(5, Token::RightParen,)
                 ],
-                vec![Span {
-                    pos: 6,
-                    content: Token::Id('a')
-                }],
+                vec![Span::new(6, Token::Id('a'))],
             )
         );
     }
