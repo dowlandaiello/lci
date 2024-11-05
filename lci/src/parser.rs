@@ -1,4 +1,6 @@
-use std::{error::Error as StdError, fmt};
+use std::{char, collections::BTreeSet, error::Error as StdError, fmt};
+
+const STARTING_ID: char = '`';
 
 const WELLFORMED_PARENTHESIZED_TERM: [Token; 3] =
     [Token::LeftParen, Token::Id('*'), Token::RightParen];
@@ -6,9 +8,9 @@ const WELLFORMED_PARENTHESIZED_TERM: [Token; 3] =
 const WELLFORMED_ABSTRACTION_HEADER: [Token; 4] =
     [Token::LeftParen, Token::Lambda, Token::Id('*'), Token::Dot];
 
-type TokenBuff = Vec<Span<Token>>;
+pub type TokenBuff = Vec<Span<Token>>;
 
-type TokenStream = [Span<Token>];
+pub type TokenStream = [Span<Token>];
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum Error {
@@ -93,34 +95,58 @@ impl Expr {
     }
 
     /// Replaces all free variables in this scope with the specified value
-    pub fn replace_free(&self, from: char, to: Expr) -> Self {
-        match self {
+    pub fn replace_free(&self, mut used_identifiers: BTreeSet<char>, from: char, to: Expr) -> Self {
+        match self.clone() {
             expr @ Self::Id(c) => {
-                if *c == from {
+                if c == from {
                     to
                 } else {
                     expr.clone()
                 }
             }
             Self::Application { lhs, rhs } => Self::Application {
-                lhs: Box::new(lhs.replace_free(from, to.clone())),
-                rhs: Box::new(rhs.replace_free(from, to)),
+                lhs: Box::new(lhs.replace_free(used_identifiers.clone(), from, to.clone())),
+                rhs: Box::new(rhs.replace_free(used_identifiers, from, to)),
             },
-            Self::Abstraction { bind_id, body } => Self::Abstraction {
-                bind_id: *bind_id,
-                body: Box::new(body.replace_free(from, to)),
-            },
+            Self::Abstraction {
+                mut bind_id,
+                mut body,
+            } => {
+                // Must do alpha renaming, because the free variables are shadowed
+                // they belong to this new inner scope
+                if used_identifiers.contains(&bind_id) {
+                    let new_bind_id = char::from_u32(
+                        used_identifiers.last().map(|c| *c).unwrap_or(STARTING_ID) as u32 + 1,
+                    )
+                    .unwrap_or(STARTING_ID);
+
+                    body = Box::new(body.clone().replace_free(
+                        used_identifiers.clone(),
+                        bind_id,
+                        Expr::Id(new_bind_id),
+                    ));
+
+                    bind_id = new_bind_id;
+                }
+
+                used_identifiers.insert(bind_id);
+
+                Self::Abstraction {
+                    bind_id,
+                    body: Box::new(body.replace_free(used_identifiers, from, to)),
+                }
+            }
         }
     }
 
-    /// Determins whether the AST contains a free variable with the given name.
+    /* Determins whether the AST contains a free variable with the given name.
     pub fn contains_free(&self, id: char) -> bool {
         match self {
             Self::Id(c) => *c == id,
             Self::Application { lhs, rhs } => lhs.contains_free(id) || rhs.contains_free(id),
             Self::Abstraction { bind_id, body } => *bind_id != id && body.contains_free(id),
         }
-    }
+    }*/
 }
 
 impl fmt::Display for Expr {
@@ -185,6 +211,14 @@ pub fn to_curried(tok_stream: &TokenStream) -> Result<Vec<TokenBuff>, Span<Error
     }
 
     Ok(terms)
+}
+
+impl TryFrom<&str> for Expr {
+    type Error = Span<Error>;
+
+    fn try_from(s: &str) -> Result<Self, Self::Error> {
+        lex(s).and_then(|tokens| tokens.as_slice().try_into())
+    }
 }
 
 impl TryFrom<&TokenStream> for Expr {
@@ -634,7 +668,7 @@ mod test {
         );
     }
 
-    #[test]
+    /*#[test]
     fn test_contains_free() {
         assert!(<&TokenStream as TryInto<Expr>>::try_into(
             lex("(\\a.(\\a.b)a)").unwrap().as_slice()
@@ -651,18 +685,5 @@ mod test {
         .unwrap()
         .rename_free('b', 'c')
         .contains_free('c'));
-    }
-
-    #[test]
-    fn test_substitution() {
-        assert_eq!(
-            <&TokenStream as TryInto<Expr>>::try_into(lex("(\\b.a)").unwrap().as_slice())
-                .unwrap()
-                .replace_free('a', Expr::Id('b')),
-            Expr::Abstraction {
-                bind_id: 'b',
-                body: Box::new(Expr::Id('b'))
-            }
-        );
-    }
+    }*/
 }

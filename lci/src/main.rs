@@ -1,8 +1,10 @@
 use parser::Expr;
-use reducer::{PureReducer, Reducer};
+use plan::{NaivePlanner, Plan, Strategy};
+use reducer::{NaiveReducer, Reducer};
 use std::io::{self, Write};
 
 mod parser;
+mod plan;
 mod reducer;
 
 macro_rules! read_eof {
@@ -39,15 +41,24 @@ fn main() {
             .try_into()
             .expect("failed to construct AST");
 
-        println!("{:?}", expr);
-
-        let mut reducer = PureReducer::new(expr);
+        let mut plan: Plan = NaivePlanner::translate(expr);
 
         loop {
             let input_buff =
                 read_eof!(input, output, "^D|1|n > ", usize).expect("failed to read input");
 
-            (0..input_buff).for_each(|_| println!("{}", reducer.next()));
+            let res = (0..input_buff).fold(plan.clone(), |acc, _| {
+                let res = NaiveReducer::step(acc);
+                println!("{}", res);
+
+                NaivePlanner::translate(res)
+            });
+
+            if res.is_irreducible() {
+                break;
+            }
+
+            plan = res;
         }
     }
 }
