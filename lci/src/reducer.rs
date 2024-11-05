@@ -1,5 +1,4 @@
 use super::parser::Expr;
-use std::collections::BTreeSet;
 
 pub trait Reducer {
     fn step(p: Expr) -> Expr;

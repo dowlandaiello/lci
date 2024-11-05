@@ -1,5 +1,4 @@
-use super::{incr_identifier, STARTING_VARIABLE_ID};
-use std::{backtrace::Backtrace, char, collections::BTreeSet, error::Error as StdError, fmt};
+use std::{backtrace::Backtrace, char, error::Error as StdError, fmt};
 
 const WELLFORMED_PARENTHESIZED_TERM: [Token; 3] =
     [Token::LeftParen, Token::Id('*'), Token::RightParen];
@@ -64,10 +63,6 @@ impl<T: fmt::Debug + PartialEq + Clone> Span<T> {
 impl<T: fmt::Debug + PartialEq + Clone> PartialEq for Span<T> {
     fn eq(&self, other: &Self) -> bool {
         self.content == other.content
-    }
-
-    fn ne(&self, other: &Self) -> bool {
-        self.content != other.content
     }
 }
 
@@ -282,8 +277,7 @@ impl TryFrom<&TokenStream> for Expr {
                     .iter()
                     .take(WELLFORMED_PARENTHESIZED_TERM.len())
                     .zip(WELLFORMED_PARENTHESIZED_TERM.iter())
-                    .filter(|(a, b)| !a.content.is_like(b))
-                    .next()
+                    .find(|(a, b)| !a.content.is_like(b))
                 {
                     return Err(unexpected_token.as_err_unrecognized_token());
                 }
@@ -313,8 +307,7 @@ impl TryFrom<&TokenStream> for Expr {
                 .iter()
                 .take(WELLFORMED_ABSTRACTION_HEADER.len())
                 .zip(WELLFORMED_ABSTRACTION_HEADER.iter())
-                .filter(|(a, b)| !a.content.is_like(b))
-                .next()
+                .find(|(a, b)| !a.content.is_like(b))
             {
                 return Err(unexpected_token.as_err_unrecognized_token());
             }
@@ -355,11 +348,7 @@ pub enum Token {
 
 impl Token {
     fn is_like(&self, other: &Token) -> bool {
-        return self == other
-            || match (self, other) {
-                (Self::Id(_), Self::Id(_)) => true,
-                _ => false,
-            };
+        self == other || matches!((self, other), (Self::Id(_), Self::Id(_)))
     }
 }
 
@@ -373,7 +362,7 @@ impl TryFrom<char> for Token {
             '(' => Ok(Self::LeftParen),
             ')' => Ok(Self::RightParen),
             x => {
-                if x >= 'a' && x <= 'z' {
+                if x.is_ascii_lowercase() {
                     Ok(Self::Id(c))
                 } else {
                     Err(Error::UnrecognizedSymbol(c))
