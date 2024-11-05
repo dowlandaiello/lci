@@ -181,9 +181,9 @@ impl Expr {
 impl fmt::Display for Expr {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Id(x) => write!(f, "{}", x),
+            Self::Id(x) => write!(f, "({})", x),
             Self::Abstraction { bind_id, body } => write!(f, "(\\{}.{})", bind_id, body),
-            Self::Application { lhs, rhs } => write!(f, "{}{}", lhs, rhs),
+            Self::Application { lhs, rhs } => write!(f, "({}{})", lhs, rhs),
         }
     }
 }
@@ -476,6 +476,27 @@ mod test {
     #[test]
     fn test_parse_succ() {
         <&str as TryInto<Expr>>::try_into("(\\n.(\\f.(\\x.(f)((n)(f)(x)))))").unwrap();
+    }
+
+    #[test]
+    fn test_parse_succ_e2e() {
+        println!(
+            "{}",
+            <&str as TryInto<Expr>>::try_into("(\\n.(\\f.(\\x.(f)((n)(f)(x)))))")
+                .unwrap()
+                .to_string()
+                .as_str()
+        );
+        assert_eq!(
+            <&str as TryInto<Expr>>::try_into(
+                <&str as TryInto<Expr>>::try_into("(\\n.(\\f.(\\x.(f)((n)(f)(x)))))")
+                    .unwrap()
+                    .to_string()
+                    .as_str()
+            )
+            .unwrap(),
+            <&str as TryInto<Expr>>::try_into("(\\n.(\\f.(\\x.(f)((n)(f)(x)))))").unwrap()
+        );
     }
 
     #[test]

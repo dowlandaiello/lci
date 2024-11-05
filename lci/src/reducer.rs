@@ -46,4 +46,18 @@ mod test {
 
         assert_eq!(NaiveReducer::step(expr), Expr::Id('a'));
     }
+
+    #[test]
+    fn test_eval_succ_lazy() {
+        assert_eq!(
+            NaiveReducer::step(NaiveReducer::step(
+                <&str as TryInto<Expr>>::try_into(
+                    "(\\n.(\\f.(\\x.(f)((n)(f)(x)))))(\\f.(\\x.(f)(x)))"
+                )
+                .unwrap()
+            )),
+            <&str as TryInto<Expr>>::try_into("(\\f.(\\x.((f)(((\\f.(\\x.((f)(x))))(f))(x)))))")
+                .unwrap()
+        );
+    }
 }
