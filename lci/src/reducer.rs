@@ -25,9 +25,7 @@ impl Reducer for NaiveReducer {
                     lhs: Box::new(Self::step(e)),
                     rhs,
                 },
-                Expr::Abstraction { bind_id, body } => {
-                    body.replace_free(BTreeSet::default(), bind_id, *rhs.clone())
-                }
+                Expr::Abstraction { bind_id, body } => body.replace_free(bind_id, *rhs.clone()),
             },
         }
     }

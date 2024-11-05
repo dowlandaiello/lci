@@ -131,7 +131,7 @@ impl Expr {
     }*/
 
     /// Replaces all free variables in this scope with the specified value
-    pub fn replace_free(&self, mut used_identifiers: BTreeSet<char>, from: char, to: Expr) -> Self {
+    pub fn replace_free(&self, from: char, to: Expr) -> Self {
         match self.clone() {
             expr @ Self::Id(c) => {
                 if c == from {
@@ -141,37 +141,15 @@ impl Expr {
                 }
             }
             Self::Application { lhs, rhs } => Self::Application {
-                lhs: Box::new(lhs.replace_free(used_identifiers.clone(), from, to.clone())),
-                rhs: Box::new(rhs.replace_free(used_identifiers, from, to)),
+                lhs: Box::new(lhs.replace_free(from, to.clone())),
+                rhs: Box::new(rhs.replace_free(from, to)),
             },
-            Self::Abstraction {
-                mut bind_id,
-                mut body,
-            } => {
+            Self::Abstraction { bind_id, body } => {
                 // Must do alpha renaming, because the free variables are shadowed
                 // they belong to this new inner scope
-                if used_identifiers.contains(&bind_id) {
-                    let new_bind_id = incr_identifier(
-                        used_identifiers
-                            .last()
-                            .map(|c| *c)
-                            .unwrap_or(STARTING_VARIABLE_ID),
-                    );
-
-                    body = Box::new(body.clone().replace_free(
-                        used_identifiers.clone(),
-                        bind_id,
-                        Expr::Id(new_bind_id),
-                    ));
-
-                    bind_id = new_bind_id;
-                }
-
-                used_identifiers.insert(bind_id);
-
                 Self::Abstraction {
                     bind_id,
-                    body: Box::new(body.replace_free(used_identifiers, from, to)),
+                    body: Box::new(body.replace_free(from, to)),
                 }
             }
         }
