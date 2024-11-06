@@ -1,5 +1,6 @@
 pub mod parser;
 pub mod reducer;
+pub mod stdlib;
 
 pub const STARTING_VARIABLE_ID: char = '`';
 

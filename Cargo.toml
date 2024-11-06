@@ -1,7 +1,8 @@
 [package]
-name = "wasm-playground"
+name = "lci"
 version = "0.1.0"
 edition = "2021"
 
-[workspace]
-members = ["lci"]
+[lib]
+name = "lclib"
+path = "src/lib.rs"
