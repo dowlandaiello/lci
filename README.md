@@ -1,2 +1,2 @@
-# wasm-playground
+# LCI
 Fun!
