@@ -2,6 +2,7 @@ use super::MAXIMUM_EVALUATION_CYCLES;
 use lclib::{
     parser::{self, Expr},
     reducer::{NaiveReducer, Reducer},
+    stdlib::combinators,
 };
 use std::{
     fs::OpenOptions,
@@ -29,6 +30,10 @@ macro_rules! read_eof {
     }};
 }
 
+fn preprocess(e: Expr) -> Expr {
+    e.replace_keyword('Y', combinators::y())
+}
+
 pub fn exec_script(fname: &str) {
     let mut f = OpenOptions::new().read(true).open(fname).unwrap();
 
@@ -37,10 +42,12 @@ pub fn exec_script(fname: &str) {
         .expect("failed to read expression file");
 
     let tok_stream = parser::lex(&buff).expect("failed to lex");
-    let mut expr: Expr = tok_stream
-        .as_slice()
-        .try_into()
-        .expect("failed to construct AST");
+    let mut expr: Expr = preprocess(
+        tok_stream
+            .as_slice()
+            .try_into()
+            .expect("failed to construct AST"),
+    );
 
     for _ in 0..MAXIMUM_EVALUATION_CYCLES {
         let new_res = NaiveReducer::step(expr.clone());
@@ -63,10 +70,12 @@ pub fn repl() {
         let input_buff = read_eof!(input, output, "> ", String).expect("failed to read input");
 
         let tok_stream = parser::lex(&input_buff).expect("failed to lex");
-        let mut expr: Expr = tok_stream
-            .as_slice()
-            .try_into()
-            .expect("failed to construct AST");
+        let mut expr: Expr = preprocess(
+            tok_stream
+                .as_slice()
+                .try_into()
+                .expect("failed to construct AST"),
+        );
 
         loop {
             let input_buff =

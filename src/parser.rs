@@ -125,6 +125,28 @@ impl Expr {
         }
     }*/
 
+    /// Replaces all instances of the keyword with the expression,
+    /// regardless of binding.
+    pub fn replace_keyword(&self, keyword: char, to: Expr) -> Self {
+        match self {
+            Self::Abstraction { bind_id, body } => Self::Abstraction {
+                bind_id: *bind_id,
+                body: Box::new(body.replace_keyword(keyword, to)),
+            },
+            Self::Id(c) => {
+                if *c == keyword {
+                    to
+                } else {
+                    Self::Id(*c)
+                }
+            }
+            Self::Application { lhs, rhs } => Self::Application {
+                lhs: Box::new(lhs.replace_keyword(keyword, to.clone())),
+                rhs: Box::new(rhs.replace_keyword(keyword, to)),
+            },
+        }
+    }
+
     /// Replaces all free variables in this scope with the specified value
     pub fn replace_free(&self, from: char, to: Expr) -> Self {
         match self.clone() {
@@ -362,7 +384,7 @@ impl TryFrom<char> for Token {
             '(' => Ok(Self::LeftParen),
             ')' => Ok(Self::RightParen),
             x => {
-                if x.is_ascii_lowercase() {
+                if x.is_ascii() {
                     Ok(Self::Id(c))
                 } else {
                     Err(Error::UnrecognizedSymbol(c))
