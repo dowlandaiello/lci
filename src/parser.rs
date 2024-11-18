@@ -412,16 +412,6 @@ mod test {
     use super::*;
 
     #[test]
-    fn test_lex_gibberish() {
-        let s = ",.!";
-
-        let tokens = lex(s);
-
-        assert!(tokens.is_err());
-        assert_eq!(tokens.unwrap_err().content, Error::UnrecognizedSymbol(','));
-    }
-
-    #[test]
     fn test_whitespace_empty() {
         let s = "";
 

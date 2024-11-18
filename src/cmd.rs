@@ -32,6 +32,9 @@ macro_rules! read_eof {
 
 fn preprocess(e: Expr) -> Expr {
     e.replace_keyword('Y', combinators::y())
+        .replace_keyword('T', combinators::t())
+        .replace_keyword('F', combinators::f())
+        .replace_keyword('?', combinators::cond())
 }
 
 pub fn exec_script(fname: &str) {

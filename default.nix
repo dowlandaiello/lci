@@ -8,6 +8,7 @@ pkgs.mkShell {
   nativeBuildInputs = with pkgs.buildPackages; [
     rust-bin.stable.latest.default
     pkg-config
+    wasm-pack
   ];
   buildInputs = with pkgs; [ openssl clang ];
   shellHook = ''

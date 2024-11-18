@@ -18,6 +18,18 @@ pub fn substitution() -> Expr {
     "(\\x.(\\y.(\\z.((x)(z))((y)(z)))))".try_into().unwrap()
 }
 
+pub fn t() -> Expr {
+    "(\\a.(\\b.a))".try_into().unwrap()
+}
+
+pub fn f() -> Expr {
+    "(\\a.(\\b.b))".try_into().unwrap()
+}
+
+pub fn cond() -> Expr {
+    "(\\p.(\\a.(\\b.(p) (a) (b))))".try_into().unwrap()
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
@@ -40,5 +52,20 @@ mod test {
     #[test]
     fn test_substitution() {
         substitution();
+    }
+
+    #[test]
+    fn test_t() {
+        t();
+    }
+
+    #[test]
+    fn test_f() {
+        f();
+    }
+
+    #[test]
+    fn tets_cond() {
+        cond();
     }
 }
