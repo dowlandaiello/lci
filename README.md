@@ -39,3 +39,8 @@ Here is an example step by step reduction of the paradoxical ombinator.
 ((\x.((x)(x)))(\x.((x)(x))))
 ^D|1|n > 
 ```
+
+## Future Work
+
+- New backend with interaction nets
+- New parser backend with Chumsky
